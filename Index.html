@@ -1,0 +1,260 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Music Nodes</title>
+    <!-- Bootstrap -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@3.3.7/dist/css/bootstrap.min.css" rel="stylesheet">
+    <!-- jQuery (Bootstrap 的所有 JavaScript 插件都依赖 jQuery，所以必须放在前边) -->
+    <script src="https://cdn.jsdelivr.net/npm/jquery@1.12.4/dist/jquery.min.js"></script>
+    <!-- 加载 Bootstrap 的所有 JavaScript 插件。你也可以根据需要只加载单个插件。 -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@3.3.7/dist/js/bootstrap.min.js"></script>
+    <!-- 读取excel文件需要的库  -->
+    <script src="papaparse.min.js"></script>
+
+    <!-- vue.js 开发版本   -->
+    <script src="https://cdn.jsdelivr.net/npm/vue@2/dist/vue.js"></script>
+    <script src="https://unpkg.com/axios/dist/axios.min.js"></script>
+
+    <style>
+        body {
+            padding-top: 40px;
+            background-color: #f2f2f2;
+        }
+        canvas{
+            background-color: white;
+            display: block;
+            margin: 0 auto;
+            width: 80%;
+            height: auto;
+        }
+        .primary{
+            color: white;
+            padding: 7px 24px;
+        }
+        .mainPanel{
+            padding-top: 24px;
+        }
+        .picker-area{
+            justify-items: center;
+            text-align: center;
+            padding: 16px;
+        }
+    </style>
+</head>
+<body>
+
+<div class="container" id = "app" style="min-height: 400px;">
+
+    <div class="row">
+        <div class="col-md-5">
+            <h3>上传.CSV格式的文件后点击绘制按钮</h3>
+        </div>
+        <div class="col-md-7 text-right" style="padding: 14px;">
+            <input type="file" accept=".csv" id="fileUpload" style="display: inline-block"  @change="upload($event)"/>
+            <input type="button" class="btn btn-info primary" id="upload" value="绘制" @click="DrawGraph" />
+        </div>
+    </div>
+
+    <div class="row">
+        <div class="jumbotron mainPanel">
+            <h5 style="text-align: center">当前画布大小：{{canvasWidth}}x{{canvasHeight}}</h5>
+            <div class="picker-area">
+                <input type="color" id="color1" name="Color1" value="#787878" @change="DrawGraph">
+                <label for="color1">Color1</label>
+                <input type="color" id="color2" name="Color2" value="#3CA5F6" @change="DrawGraph">
+                <label for="color2">Color2</label>
+                <input type="color" id="color3" name="Color3" value="#E66465" @change="DrawGraph">
+                <label for="color3">Color3</label>
+            </div>
+
+            <canvas id="canvas" width="1400" height="1800">
+                你的浏览器版本太低啦！暂不支持canvas绘制。
+            </canvas>
+            <div class="picker-area">
+                <button type="button" class="btn btn-lg primary btn-warning" @click="CanvasToImage"> 保存图片 </button>
+            </div>
+        </div>
+    </div>
+</div>
+<footer class="footer" style="padding:0 20px 0 20px;">
+    <div class="container" style="padding: 40px 0 68px 0; height: 40px; margin-bottom: 16px">
+        <p style="float: right">
+            <a id="backtotop" href="#">Back to top</a>
+        </p>
+        <p style="color: gray"> Developed By Whale.</p>
+        <!--        <p>New to Bootstrap? <a href="../../">Visit the homepage</a> or read our <a href="../../getting-started/">getting started guide</a>.</p>-->
+    </div>
+    <script>
+        let url = window.location.pathname;
+        if(url.indexOf("chat") >= 0 || url.indexOf("gomoku")>=0) { //判断url对象文件名中是否包含gomoku
+            $("#backtotop").css("display","none");
+        }
+    </script>
+</footer>
+
+<script>
+    let app = new Vue({
+
+        el: '#app',
+
+        data: {
+            canvas: null,
+            file: null,
+            nodesData : []
+        },
+
+        computed:{
+            canvasWidth(){
+                if(this.canvas!=null){
+                    return this.canvas.width;
+                }
+            },
+            canvasHeight(){
+                if(this.canvas!=null){
+                    return this.canvas.height;
+                }
+            }
+
+        },
+
+        mounted(){
+            this.GetCanvasElement();
+        },
+
+        methods:{
+
+            upload(event){
+                let file = event.target.files[0];
+                let fileName = file.name;
+                let idx = fileName.lastIndexOf(".");
+                let success = false;
+                if (idx != -1) {
+                    let ext = fileName.substr(idx + 1).toUpperCase();
+                    ext = ext.toLowerCase();
+                    if (ext != "csv") {
+                        alert("请上传csv格式的文件");
+                        return;
+                    } else {
+                      this.file = file;
+                      success = true;
+                    }
+                }
+                if(success){
+                    alert("上传成功");
+                    this.ExcelToJson();
+                }
+            },
+
+            ExcelToJson(){
+                if(this.file == null){
+                    alert("还没有上传文件，请先上传");
+                    return;
+                }
+                let _this = this;
+                Papa.parse(this.file, {
+                    header: false,
+                    complete: function (results){
+                        _this.nodesData = results.data;
+                    },
+                    error: function (results){
+                        alert(results.message);
+                    }
+                })
+            },
+
+            GetCanvasElement(){
+                this.canvas = document.getElementById('canvas');
+            },
+
+            ClearGraph(){
+                let ctx = this.canvas.getContext('2d');
+                ctx.clearRect(0,0, canvas.width, canvas.height);
+            },
+
+            TransferNodeInfo(loud, pitch, channel){
+                let level1 = 55;                        // 响度分届1
+                let level2 = 65;                        // 响度分届2
+                let color = 0;
+                // 比较两次得到color
+                if(loud >= level1){
+                    color = loud >= level2 ? 2 : 1;
+                }else{
+                    color = 0;
+                }
+                let height = pitch;
+                let width = channel === 0 ? 2 : 1;
+                return {
+                    width: width,
+                    height: height,
+                    color: color,
+                }
+            },
+
+            // 根据响度、音高、左右声道来绘制一个节点
+            DrawNode(ctx, x, y, scale, minWidth, minHeight, width, height, color){
+                let drawWidth = width * minWidth;
+                let drawHeight = height * minHeight;
+                let centerY = y + (7 * minHeight - drawHeight) * scale / 2;
+                ctx.fillStyle = color;
+                ctx.fillRect(x, centerY, drawWidth * scale, drawHeight * scale);
+            },
+
+            DrawGraph(){
+
+                this.ClearGraph();
+                let ctx = this.canvas.getContext('2d');
+
+                // 获取绘制的参数信息
+                let total = this.nodesData.length - 1;  // 数据条数
+                let scale = 10;                         // 整体大小
+                let minWidth = 0.5;                     // 单位宽度
+                let minHeight = 0.5;                    // 单位长度，最大长度为 7 * minHeight
+                let maxHeight = 7 * minHeight;
+                let color1 = $("#color1").val();        // 响度等级1颜色
+                let color2 = $("#color2").val();        // 响度等级2颜色
+                let color3 = $("#color3").val();        // 响度等级3颜色
+                let colors = [color1, color2, color3];
+
+                let startWidth = 80;                    // 起始位置x
+                let startHeight = 80;                   // 起始位置y
+                let maxNodesPerRow = 90;                // 每行最大的方块数
+
+                let counter = 0;
+                let curWidth = startWidth;
+                let curHeight = startHeight;
+                // 遍历数据列表，逐一绘制，注意换行
+                for(let i = 1; i<this.nodesData.length; i++){
+                    let loud = parseInt(this.nodesData[i][0],10);
+                    let pitch = parseInt(this.nodesData[i][1],10);
+                    let channel = parseInt(this.nodesData[i][2],10);
+                    let paras = this.TransferNodeInfo(loud, pitch, channel);
+                    // 画满90换行
+                    if(counter === maxNodesPerRow){
+                        curHeight += minHeight * scale * 20;
+                        curWidth = startWidth;
+                        counter = 0;
+                    }
+                    this.DrawNode(ctx, curWidth, curHeight, scale, minWidth, minHeight, paras.width, paras.height, colors[paras.color]);
+                    curWidth += (paras.width + 1) * minWidth * scale;
+                    counter++;
+                }
+
+                // this.DrawNode(ctx,40,40,scale, minHeight * scale,color1);
+                // this.DrawNode(ctx,55,40,scale, minHeight * scale,color2);
+                // this.DrawNode(ctx,70,40,scale, 3.5 * scale,color3);
+            },
+
+            CanvasToImage(){
+                let dataURL = this.canvas.toDataURL("image/png");
+                let newTab = window.open('about:blank','image from canvas');
+                newTab.document.write("<img src='" + dataURL + "' alt='from canvas'/>");
+            }
+        }
+    })
+</script>
+
+</body>
+</html>
